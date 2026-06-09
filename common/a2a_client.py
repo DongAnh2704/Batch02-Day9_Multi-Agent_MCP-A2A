@@ -25,6 +25,9 @@ from a2a.types import (
 logger = logging.getLogger(__name__)
 
 
+_CARD_CACHE: dict[str, AgentCard] = {}
+
+
 async def delegate(
     endpoint: str,
     question: str,
@@ -45,11 +48,15 @@ async def delegate(
         The agent's text response, or an empty string if none could be extracted.
     """
     async with httpx.AsyncClient(timeout=300.0) as http_client:
-        # Fetch agent card
-        card_url = f"{endpoint}/.well-known/agent.json"
-        card_resp = await http_client.get(card_url)
-        card_resp.raise_for_status()
-        agent_card = AgentCard.model_validate(card_resp.json())
+        if endpoint in _CARD_CACHE:
+            agent_card = _CARD_CACHE[endpoint]
+        else:
+            # Fetch agent card
+            card_url = f"{endpoint}/.well-known/agent.json"
+            card_resp = await http_client.get(card_url)
+            card_resp.raise_for_status()
+            agent_card = AgentCard.model_validate(card_resp.json())
+            _CARD_CACHE[endpoint] = agent_card
 
         # Build deprecated (legacy) A2AClient — straightforward for send_message
         client = A2AClient(httpx_client=http_client, agent_card=agent_card)
